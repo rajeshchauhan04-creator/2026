@@ -1,0 +1,6 @@
+{
+  "name": "BigBull AI signal",
+  "description": "Real-time trading visualization for Gold (XAU) and Bitcoin (BTC) featuring UT Bot alerts and Bollinger Bands indicators with automated signal detection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

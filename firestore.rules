@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isVerified() { return true; } // For now allowing all authenticated users
+
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'rajeshchauhan04@gmail.com' || 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // --- Signal Validation ---
+    function isValidSignal(data) {
+      return data.keys().hasAll(['symbol', 'type', 'price', 'time'])
+        && data.symbol is string
+        && data.type in ['buy', 'sell']
+        && data.price is number
+        && data.time is number;
+    }
+
+    function isValidUser(data) {
+      // Basic keys required for start/membership
+      return data.keys().hasAll(['uid', 'email', 'trialStartDate', 'membership', 'createdAt', 'updatedAt'])
+        && data.uid is string
+        && data.email is string && data.email.size() <= 200
+        && data.trialStartDate is number
+        && data.membership in ['free', 'premium']
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collections ---
+
+    match /signals/{signalId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      
+      allow create: if isSignedIn() && isOwner(userId) 
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().membership == 'free'
+        && incoming().createdAt == request.time;
+      
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin())
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time;
+    }
+
+    match /admins/{adminId} {
+      allow read: if isSignedIn(); // Allow checking if self is admin
+      allow write: if false; // System only or manual setup
+    }
+  }
+}
